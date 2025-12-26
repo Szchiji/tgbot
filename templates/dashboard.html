@@ -6,58 +6,48 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <style>
-        body { display: flex; background: #f4f7f6; min-height: 100vh; }
-        .sidebar { width: 240px; background: #fff; border-right: 1px solid #ddd; }
-        .main { flex: 1; padding: 30px; }
-        .nav-link.active { background: #e7f3ff; color: #0088cc; font-weight: bold; }
+        body { display: flex; background: #f8f9fa; min-height: 100vh; font-family: sans-serif; }
+        .sidebar { width: 240px; background: #fff; border-right: 1px solid #dee2e6; position: fixed; height: 100vh; }
+        .main { margin-left: 240px; flex: 1; padding: 40px; }
+        .sidebar-item { padding: 12px 20px; color: #333; text-decoration: none; display: block; }
+        .sidebar-item:hover, .active { background: #f0f7ff; color: #0088cc; border-right: 4px solid #0088cc; }
+        .card { border: none; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .form-switch .form-check-input { width: 3em; height: 1.5em; }
     </style>
 </head>
 <body>
-    <div class="sidebar d-flex flex-column p-3">
-        <h5 class="text-primary mb-4"><i class="bi bi-robot"></i> 榨汁系统后台</h5>
-        <ul class="nav nav-pills flex-column mb-auto">
-            <li class="nav-item"><a href="#" class="nav-link active"><i class="bi bi-people"></i> 成员管理</a></li>
-            <li class="nav-item"><a href="#" class="nav-link"><i class="bi bi-gear"></i> 系统设置</a></li>
-        </ul>
+    <div class="sidebar py-3">
+        <div class="px-4 mb-4 text-primary fw-bold">🍶 榨汁系统后台</div>
+        <a href="#" class="sidebar-item"><i class="bi bi-people"></i> 成员管理</a>
+        <a href="#" class="sidebar-item active"><i class="bi bi-gear"></i> 其他设置</a>
     </div>
 
     <div class="main">
-        <div class="card p-4 mb-4 shadow-sm">
-            <h5>全局功能开关</h5>
-            <form action="/update_settings" method="post" class="row g-3">
-                <div class="col-md-3 form-check form-switch ms-3">
-                    <input class="form-check-input" type="checkbox" name="del_join" {% if settings.del_join %}checked{% endif %}>
-                    <label>自动删除进群消息</label>
+        <h4 class="mb-4">其他设置</h4>
+        <div class="card p-4">
+            <form action="/update_settings" method="post">
+                <div class="d-flex justify-content-between align-items-center py-3 border-bottom">
+                    <div><i class="bi bi-question-circle"></i> 自动删除进群消息：</div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="del_join" {% if settings.del_join %}checked{% endif %}>
+                    </div>
                 </div>
-                <div class="col-md-3 form-check form-switch">
-                    <input class="form-check-input" type="checkbox" name="auto_react" {% if settings.auto_react %}checked{% endif %}>
-                    <label>老师发言自动点赞</label>
+                <div class="d-flex justify-content-between align-items-center py-3 border-bottom">
+                    <div><i class="bi bi-question-circle"></i> 自动删除退群消息：</div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="del_leave" {% if settings.del_leave %}checked{% endif %}>
+                    </div>
                 </div>
-                <div class="col-md-2">
-                    <button type="submit" class="btn btn-sm btn-primary">应用设置</button>
+                <div class="d-flex justify-content-between align-items-center py-3">
+                    <div><i class="bi bi-question-circle"></i> 老师发言自动点赞：</div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="auto_react" {% if settings.auto_react %}checked{% endif %}>
+                    </div>
+                </div>
+                <div class="text-center mt-5">
+                    <button type="submit" class="btn btn-primary px-5 py-2">提交更改</button>
                 </div>
             </form>
-        </div>
-
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <table class="table align-middle">
-                    <thead><tr><th>艺名</th><th>地区</th><th>状态</th><th>到期时间</th><th>操作</th></tr></thead>
-                    <tbody>
-                        {% for m in members %}
-                        <tr>
-                            <form action="/mod_member/{{ m.user_id }}" method="post">
-                                <td>{{ m.stage_name }}</td>
-                                <td><input name="area" value="{{ m.area }}" class="form-control form-control-sm"></td>
-                                <td>{% if m.user_id in checked %}<span class="badge bg-success">今日已开课</span>{% else %}<span class="badge bg-secondary">休息中</span>{% endif %}</td>
-                                <td><input type="date" name="expire" value="{{ m.expire }}" class="form-control form-control-sm"></td>
-                                <td><button class="btn btn-sm btn-outline-primary">保存</button></td>
-                            </form>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
         </div>
     </div>
 </body>
