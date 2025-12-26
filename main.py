@@ -5,30 +5,28 @@ from fastapi import FastAPI, Request, Form, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from fastapi.staticfiles import StaticFiles
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.client.default import DefaultBotProperties
 import uvicorn
 
-# --- 配置读取 ---
+# --- 1. 配置加载 ---
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 DB_PATH = os.getenv("DB_PATH", "/data/bot.db")
 WEB_ADMIN = os.getenv("WEB_ADMIN", "admin")
 WEB_PASS = os.getenv("WEB_PASS", "admin888")
 
-# --- 初始化服务 ---
+# --- 2. 初始化服务 ---
 app = FastAPI()
 security = HTTPBasic()
 templates = Jinja2Templates(directory="templates")
 
-# 适配 aiogram 3.7.0+
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
 logging.basicConfig(level=logging.INFO)
 
-# --- 数据库逻辑 ---
+# --- 3. 数据库持久化 ---
 @contextmanager
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -51,14 +49,14 @@ def init_db():
         conn.executemany("INSERT OR IGNORE INTO settings VALUES (?, ?)", defaults)
         conn.commit()
 
-# --- 鉴权 ---
+# --- 4. Web 鉴权 ---
 def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
     if not (secrets.compare_digest(credentials.username, WEB_ADMIN) and 
             secrets.compare_digest(credentials.password, WEB_PASS)):
         raise HTTPException(status_code=401, headers={"WWW-Authenticate": "Basic"})
     return credentials.username
 
-# --- Web 路由 ---
+# --- 5. Web 路由 (统计、会员、设置) ---
 
 @app.get("/", response_class=HTMLResponse)
 @app.get("/stats", response_class=HTMLResponse)
@@ -109,7 +107,7 @@ async def update_settings(del_join: bool = Form(False), del_leave: bool = Form(F
         conn.commit()
     return RedirectResponse(url="/settings", status_code=303)
 
-# --- 机器人逻辑 ---
+# --- 6. 机器人业务逻辑 (陌生人不管) ---
 
 @dp.message(F.text.contains("打卡"))
 async def handle_checkin(msg: types.Message):
@@ -123,7 +121,7 @@ async def handle_checkin(msg: types.Message):
         conn.commit()
     await msg.reply(f"✅ <b>{member['stage_name']}</b> 打卡成功！\n时间：{now.strftime('%H:%M:%S')}")
 
-# --- 启动 ---
+# --- 7. 系统启动 ---
 @app.on_event("startup")
 async def startup_event():
     init_db()
