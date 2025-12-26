@@ -1,51 +1,61 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>后台管理</title>
+    <title>榨汁系统管理后台</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <style>
-        body { display: flex; background: #f8f9fa; min-height: 100vh; font-family: sans-serif; }
-        .sidebar { width: 240px; background: #fff; border-right: 1px solid #dee2e6; position: fixed; height: 100vh; }
-        .main { margin-left: 240px; flex: 1; padding: 40px; }
-        .sidebar-item { padding: 12px 20px; color: #333; text-decoration: none; display: block; }
-        .sidebar-item:hover, .active { background: #f0f7ff; color: #0088cc; border-right: 4px solid #0088cc; }
-        .card { border: none; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .form-switch .form-check-input { width: 3em; height: 1.5em; }
+        :root { --sidebar-w: 240px; --primary-blue: #007bff; }
+        body { display: flex; background: #f4f7f9; min-height: 100vh; font-size: 14px; }
+        .sidebar { width: var(--sidebar-w); background: #fff; border-right: 1px solid #e0e0e0; position: fixed; height: 100vh; }
+        .main-content { margin-left: var(--sidebar-w); flex: 1; padding: 40px; }
+        .sidebar-nav .nav-link { color: #555; padding: 12px 20px; border-radius: 0; display: flex; align-items: center; }
+        .sidebar-nav .nav-link i { margin-right: 10px; font-size: 1.2rem; }
+        .sidebar-nav .nav-link.active { background: #e9f2ff; color: var(--primary-blue); border-right: 4px solid var(--primary-blue); }
+        .card { border: none; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .form-switch .form-check-input { width: 3em; height: 1.5em; cursor: pointer; }
     </style>
 </head>
 <body>
-    <div class="sidebar py-3">
-        <div class="px-4 mb-4 text-primary fw-bold">🍶 榨汁系统后台</div>
-        <a href="#" class="sidebar-item"><i class="bi bi-people"></i> 成员管理</a>
-        <a href="#" class="sidebar-item active"><i class="bi bi-gear"></i> 其他设置</a>
+    <div class="sidebar py-4">
+        <div class="px-4 mb-4 fw-bold text-primary text-uppercase">Management</div>
+        <nav class="nav sidebar-nav flex-column">
+            <a href="#" class="nav-link"><i class="bi bi-people"></i> 成员管理</a>
+            <a href="#" class="nav-link"><i class="bi bi-chat-heart"></i> 消息统计</a>
+            <a href="#" class="nav-link active"><i class="bi bi-gear"></i> 其他设置</a>
+            <a href="#" class="nav-link"><i class="bi bi-shield-lock"></i> 自动查U</a>
+        </nav>
     </div>
 
-    <div class="main">
-        <h4 class="mb-4">其他设置</h4>
+    <div class="main-content">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h4 class="fw-bold">其他设置</h4>
+            <span class="text-muted">管理员: {{ request.user }}</span>
+        </div>
+
         <div class="card p-4">
             <form action="/update_settings" method="post">
                 <div class="d-flex justify-content-between align-items-center py-3 border-bottom">
-                    <div><i class="bi bi-question-circle"></i> 自动删除进群消息：</div>
+                    <div><i class="bi bi-info-circle me-2 text-muted"></i>自动删除进群消息：</div>
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" name="del_join" {% if settings.del_join %}checked{% endif %}>
                     </div>
                 </div>
                 <div class="d-flex justify-content-between align-items-center py-3 border-bottom">
-                    <div><i class="bi bi-question-circle"></i> 自动删除退群消息：</div>
+                    <div><i class="bi bi-info-circle me-2 text-muted"></i>自动删除退群消息：</div>
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" name="del_leave" {% if settings.del_leave %}checked{% endif %}>
                     </div>
                 </div>
                 <div class="d-flex justify-content-between align-items-center py-3">
-                    <div><i class="bi bi-question-circle"></i> 老师发言自动点赞：</div>
+                    <div><i class="bi bi-info-circle me-2 text-muted"></i>老师发言自动点赞：</div>
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" name="auto_react" {% if settings.auto_react %}checked{% endif %}>
                     </div>
                 </div>
                 <div class="text-center mt-5">
-                    <button type="submit" class="btn btn-primary px-5 py-2">提交更改</button>
+                    <button type="submit" class="btn btn-primary px-5 rounded-pill">提交保存</button>
                 </div>
             </form>
         </div>
