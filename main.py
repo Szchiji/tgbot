@@ -1,90 +1,90 @@
-import os, asyncio, sqlite3, logging, re
+import os, asyncio, sqlite3, logging, secrets
 from datetime import datetime
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Request, Form, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command, CommandObject
 from aiogram.fsm.storage.memory import MemoryStorage
 import uvicorn
 
-# --- 基础配置 ---
+# --- 1. 读取 Render 环境变量 ---
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-DB_PATH = "/data/bot.db"
+DB_PATH = os.getenv("DB_PATH", "/data/bot.db")
+WEB_ADMIN = os.getenv("WEB_ADMIN", "admin")
+WEB_PASS = os.getenv("WEB_PASS", "admin888")
 
-# --- 初始化 ---
+# --- 2. 初始化 ---
 app = FastAPI()
+security = HTTPBasic()
 templates = Jinja2Templates(directory="templates")
 bot = Bot(token=TOKEN, parse_mode="HTML")
 dp = Dispatcher(storage=MemoryStorage())
 logging.basicConfig(level=logging.INFO)
 
-# --- 数据库逻辑 ---
+# --- 3. 数据库逻辑 ---
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 def init_db():
-    if not os.path.exists("/data"): os.makedirs("/data")
+    db_dir = os.path.dirname(DB_PATH)
+    if not os.path.exists(db_dir): os.makedirs(db_dir)
     with get_db() as conn:
-        # 会员表
         conn.execute('''CREATE TABLE IF NOT EXISTS members 
-            (user_id BIGINT PRIMARY KEY, stage_name TEXT, area TEXT, chest TEXT, 
-             p1000 TEXT, p2000 TEXT, link TEXT, expire DATE)''')
-        # 打卡表
-        conn.execute('''CREATE TABLE IF NOT EXISTS checkins 
-            (user_id BIGINT, date TEXT, PRIMARY KEY(user_id, date))''')
-        # 系统设置开关
-        conn.execute('''CREATE TABLE IF NOT EXISTS settings 
-            (key TEXT PRIMARY KEY, value INTEGER DEFAULT 0)''')
-        
-        defaults = [('del_join', 1), ('del_leave', 1), ('auto_react', 1), ('auto_restrict', 1)]
+            (user_id BIGINT PRIMARY KEY, stage_name TEXT, area TEXT, expire DATE)''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value INTEGER)''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS checkins (user_id BIGINT, date TEXT, PRIMARY KEY(user_id, date))''')
+        # 初始化截图中的开关
+        defaults = [('del_join', 1), ('del_leave', 1), ('auto_react', 1)]
         conn.executemany("INSERT OR IGNORE INTO settings VALUES (?, ?)", defaults)
         conn.commit()
 
-def get_setting(key: str) -> bool:
-    with get_db() as conn:
-        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
-        return True if row and row['value'] == 1 else False
+# 后台权限验证
+def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
+    is_user = secrets.compare_digest(credentials.username, WEB_ADMIN)
+    is_pass = secrets.compare_digest(credentials.password, WEB_PASS)
+    if not (is_user and is_pass):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized", headers={"WWW-Authenticate": "Basic"})
+    return credentials.username
 
-# --- Web 管理后台路由 ---
+# --- 4. Web 路由 (对应截图 UI) ---
 @app.get("/", response_class=HTMLResponse)
-async def admin_index(request: Request):
+async def dashboard(request: Request, user: str = Depends(authenticate)):
     today = datetime.now().strftime("%Y-%m-%d")
     with get_db() as conn:
         members = conn.execute("SELECT * FROM members").fetchall()
-        checked = [c['user_id'] for c in conn.execute("SELECT user_id FROM checkins WHERE date=?", (today,)).fetchall()]
         sets = {s['key']: s['value'] for s in conn.execute("SELECT * FROM settings").fetchall()}
+        checked = [c['user_id'] for c in conn.execute("SELECT user_id FROM checkins WHERE date=?", (today,)).fetchall()]
     return templates.TemplateResponse("dashboard.html", {
-        "request": request, "members": members, "checked": checked, "settings": sets, "today": today
+        "request": request, "members": members, "settings": sets, "checked": checked
     })
 
 @app.post("/update_settings")
-async def update_settings(del_join: bool = Form(False), auto_react: bool = Form(False), auto_restrict: bool = Form(False)):
+async def update_settings(del_join: bool = Form(False), del_leave: bool = Form(False), auto_react: bool = Form(False), user: str = Depends(authenticate)):
     with get_db() as conn:
         conn.execute("UPDATE settings SET value=? WHERE key='del_join'", (1 if del_join else 0,))
+        conn.execute("UPDATE settings SET value=? WHERE key='del_leave'", (1 if del_leave else 0,))
         conn.execute("UPDATE settings SET value=? WHERE key='auto_react'", (1 if auto_react else 0,))
-        conn.execute("UPDATE settings SET value=? WHERE key='auto_restrict'", (1 if auto_restrict else 0,))
         conn.commit()
     return RedirectResponse(url="/", status_code=303)
 
-@app.post("/mod_member/{uid}")
-async def mod_member(uid: int, area: str = Form(...), expire: str = Form(...)):
+# --- 5. 机器人逻辑 (根据后台开关执行) ---
+def check_setting(key):
     with get_db() as conn:
-        conn.execute("UPDATE members SET area=?, expire=? WHERE user_id=?", (area, expire, uid))
-        conn.commit()
-    return RedirectResponse(url="/", status_code=303)
+        res = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        return res and res['value'] == 1
 
-# --- 机器人事件处理 ---
-
-# 自动删除入群消息
 @dp.message(F.new_chat_members)
 async def on_join(message: types.Message):
-    if get_setting('del_join'): await message.delete()
+    if check_setting('del_join'): await message.delete()
 
-# 打卡逻辑
+@dp.message(F.left_chat_member)
+async def on_leave(message: types.Message):
+    if check_setting('del_leave'): await message.delete()
+
 @dp.message(F.text == "打卡")
 async def bot_checkin(message: types.Message):
     uid = message.from_user.id
@@ -95,27 +95,12 @@ async def bot_checkin(message: types.Message):
             try:
                 conn.execute("INSERT INTO checkins VALUES (?,?)", (uid, today))
                 conn.commit()
-                await message.answer(f"✅ {m['stage_name']} 打卡成功！")
-                if get_setting('auto_react'): await message.react([types.ReactionTypeEmoji(emoji="🔥")])
+                await message.answer(f"✅ {m['stage_name']} 打卡成功")
+                if check_setting('auto_react'): await message.react([types.ReactionTypeEmoji(emoji="🔥")])
             except: await message.answer("📌 今日已打卡")
-        else: await message.answer("❌ 无权限或已到期")
+        else: await message.answer("❌ 权限不足")
 
-# 榜单查询
-@dp.message(F.text == "今日榨汁")
-async def bot_list(message: types.Message):
-    today = datetime.now().strftime("%Y-%m-%d")
-    with get_db() as conn:
-        rows = conn.execute("SELECT m.* FROM checkins c JOIN members m ON c.user_id = m.user_id WHERE c.date=?", (today,)).fetchall()
-    if not rows: return await message.answer("🍶 今日暂无老师打卡")
-    
-    bot_info = await bot.get_me()
-    res = "🍶 <b>今日榨汁榜单</b>\n\n"
-    for r in rows:
-        url = f"https://t.me/{bot_info.username}?start=contact_{r['user_id']}"
-        res += f"📍 {r['area']} | <b>{r['stage_name']}</b> {r['chest']} {r['p1000']}P\n💬 <a href='{url}'>发起私聊</a>\n\n"
-    await message.answer(res, disable_web_page_preview=True)
-
-# 启动
+# --- 启动 ---
 @app.on_event("startup")
 async def startup():
     init_db()
