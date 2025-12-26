@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>打卡统计 - 后台管理</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { display: flex; background: #f8f9fa; min-height: 100vh; }
+        .sidebar { width: 220px; background: #fff; border-right: 1px solid #dee2e6; position: fixed; height: 100vh; padding-top: 20px; }
+        .main { margin-left: 220px; flex: 1; padding: 40px; }
+        .nav-link { color: #333; padding: 12px 25px; text-decoration: none; display: block; }
+        .nav-link.active { background: #0d6efd; color: #fff; }
+        .stat-card { border: none; border-radius: 10px; color: white; padding: 25px; }
+    </style>
+</head>
+<body>
+    <div class="sidebar text-center">
+        <h5 class="text-primary mb-4">管理后台</h5>
+        <a href="/stats" class="nav-link active">消息统计</a>
+        <a href="/members" class="nav-link">会员管理</a>
+        <a href="/login" class="nav-link">退出登录</a>
+    </div>
+
+    <div class="main">
+        <h3 class="mb-4">实时消息统计</h3>
+        <div class="row g-4 mb-5">
+            <div class="col-md-4">
+                <div class="stat-card bg-primary shadow-sm">
+                    <small>今日打卡总数</small>
+                    <h2 class="fw-bold">{{ today_count }}</h2>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card bg-success shadow-sm">
+                    <small>系统会员人数</small>
+                    <h2 class="fw-bold">{{ total_members }}</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white fw-bold">最新打卡动态</div>
+                    <ul class="list-group list-group-flush">
+                        {% for c in recent_checkins %}
+                        <li class="list-group-item d-flex justify-content-between p-3">
+                            <span><strong>{{ c.stage_name }}</strong> ({{ c.area }}) 提交了打卡</span>
+                            <small class="text-muted">{{ c.checkin_time }}</small>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white fw-bold">活跃地区</div>
+                    <div class="card-body">
+                        {% for area in area_stats %}
+                        <div class="d-flex justify-content-between small mb-2">
+                            <span>{{ area.area }}</span>
+                            <span>{{ area.count }} 次</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
