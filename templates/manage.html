@@ -2,90 +2,97 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>管理后台 - 方丈机器人</title>
+    <title>管理后台</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
-    <style>
-        body { display: flex; height: 100vh; background: #f4f7f9; margin: 0; }
-        .sidebar { width: 260px; background: #001529; color: white; display: flex; flex-direction: column; }
-        .sidebar-header { padding: 20px; font-size: 1.2rem; font-weight: bold; border-bottom: 1px solid #102339; }
-        .nav-link { color: #a6adb4; padding: 12px 20px; transition: 0.3s; text-decoration: none; }
-        .nav-link:hover { background: #1890ff; color: white; }
-        .nav-link.active { background: #1890ff; color: white; }
-        .main-content { flex: 1; overflow-y: auto; padding: 30px; }
-        .user-table img { width: 45px; height: 45px; border-radius: 8px; object-fit: cover; }
-    </style>
 </head>
-<body>
-    <div class="sidebar">
-        <div class="sidebar-header"><i class="bi bi-robot me-2"></i>方丈管理后台</div>
-        <nav class="nav flex-column mt-3">
-            <a class="nav-link" href="/dashboard?token={{token}}&gid={{gid}}"><i class="bi bi-speedometer2 me-2"></i> 数据看板</a>
-            <a class="nav-link active" href="#"><i class="bi bi-people me-2"></i> 成员管理</a>
-            <a class="nav-link" href="/settings?token={{token}}&gid={{gid}}"><i class="bi bi-gear me-2"></i> 系统设置</a>
-            <div class="mt-4 px-3 small text-muted">当前群组：{{ group.group_name }}</div>
-            <hr class="mx-3 opacity-25">
-            <a class="nav-link text-warning" href="/portal?token={{token}}"><i class="bi bi-arrow-left-circle me-2"></i> 切换群组</a>
-        </nav>
-    </div>
-
-    <div class="main-content">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h4 class="fw-bold">认证成员列表</h4>
-            <span class="badge bg-secondary">GID: {{ gid }}</span>
+<body class="bg-light">
+    <div class="container-fluid p-4">
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header fw-bold">列表显示设置</div>
+            <form class="card-body row g-3" action="/save_settings" method="post">
+                <input type="hidden" name="token" value="{{token}}">
+                <input type="hidden" name="gid" value="{{gid}}">
+                <div class="col-md-2">
+                    <label class="form-label">每页行数</label>
+                    <input type="number" name="page_size" class="form-control" value="{{group.page_size}}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">点赞图标</label>
+                    <input type="text" name="like_emoji" class="form-control" value="{{group.like_emoji}}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">列表显示格式</label>
+                    <input type="text" name="list_template" class="form-control" value="{{group.list_template}}">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-primary w-100">保存全局配置</button>
+                </div>
+            </form>
         </div>
 
-        <div class="card border-0 shadow-sm mb-5">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-bold">认证用户管理</span>
+                <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#userModal">+ 添加用户</button>
+            </div>
             <div class="card-body p-0">
-                <div class="p-3 border-bottom">
-                    <form action="/manage" method="get" class="d-flex w-50">
-                        <input type="hidden" name="token" value="{{token}}">
-                        <input type="hidden" name="gid" value="{{gid}}">
-                        <input type="text" name="q" class="form-control me-2" placeholder="搜索 ID 或名字..." value="{{q}}">
-                        <button class="btn btn-primary px-4" type="submit">搜索</button>
-                    </form>
-                </div>
-                <table class="table user-table table-hover align-middle mb-0">
+                <table class="table table-hover mb-0">
                     <thead class="table-light">
-                        <tr>
-                            <th class="ps-3">照片</th><th>名字</th><th>会员ID</th><th>地区</th><th>操作</th>
-                        </tr>
+                        <tr><th>ID</th><th>名字</th><th>地区</th><th>胸围</th><th>价格</th><th>排序</th><th>操作</th></tr>
                     </thead>
                     <tbody>
                         {% for u in users %}
                         <tr>
-                            <td class="ps-3"><img src="{{ u.photo_url or '/static/default.png' }}"></td>
-                            <td class="fw-bold">{{ u.name }}</td>
-                            <td><code>{{ u.user_id }}</code></td>
-                            <td>{{ u.area }}</td>
-                            <td><button class="btn btn-sm btn-outline-primary">编辑详情</button></td>
+                            <td>{{u.user_id}}</td><td>{{u.name}}</td><td>{{u.area}}</td><td>{{u.chest_size}}</td><td>{{u.price}}</td><td>{{u.sort_order}}</td>
+                            <td><button class="btn btn-sm btn-outline-danger">删除</button></td>
                         </tr>
                         {% endfor %}
-                        {% if not users %}
-                        <tr><td colspan="5" class="text-center py-5 text-muted">暂无认证会员，请在下方录入。</td></tr>
-                        {% endif %}
                     </tbody>
                 </table>
             </div>
         </div>
 
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white fw-bold py-3"><i class="bi bi-plus-circle me-2"></i>新增认证会员</div>
-            <div class="card-body">
-                <form action="/save_user" method="post" enctype="multipart/form-data" class="row g-4">
+        <div class="card shadow-sm">
+            <div class="card-header fw-bold">列表底部按钮 (今日榨汁下方)</div>
+            <div class="card-body p-0">
+                <table class="table table-sm">
+                    <thead><tr><th>文字</th><th>类型</th><th>内容</th><th>操作</th></tr></thead>
+                    <tbody>
+                        {% for b in bottom_btns %}
+                        <tr><td>{{b.btn_text}}</td><td>{{b.btn_type}}</td><td>{{b.btn_value}}</td><td>删除</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <form action="/save_bottom_btn" method="post" class="p-3 bg-light row g-2">
                     <input type="hidden" name="token" value="{{token}}">
                     <input type="hidden" name="gid" value="{{gid}}">
-                    <div class="col-md-4"><label class="form-label small fw-bold">会员 ID (必填)</label><input type="number" name="user_id" class="form-control" required></div>
-                    <div class="col-md-4"><label class="form-label small fw-bold">会员名字 (必填)</label><input type="text" name="name" class="form-control" required></div>
-                    <div class="col-md-4"><label class="form-label small fw-bold">老师艺名</label><input type="text" name="teacher_name" class="form-control"></div>
-                    <div class="col-md-3"><label class="form-label small fw-bold">所在地区</label><input type="text" name="area" class="form-control"></div>
-                    <div class="col-md-3"><label class="form-label small fw-bold">价格</label><input type="text" name="price" class="form-control"></div>
-                    <div class="col-md-3"><label class="form-label small fw-bold">联系方式</label><input type="text" name="bi_contact" class="form-control"></div>
-                    <div class="col-md-3"><label class="form-label small fw-bold">上传照片</label><input type="file" name="photo" class="form-control" accept="image/*"></div>
-                    <div class="col-12"><button type="submit" class="btn btn-success px-5 py-2">提交并保存到数据库</button></div>
+                    <div class="col-md-3"><input name="btn_text" class="form-control" placeholder="按钮文字"></div>
+                    <div class="col-md-2"><select name="btn_type" class="form-select"><option value="url">链接</option><option value="callback">功能</option></select></div>
+                    <div class="col-md-5"><input name="btn_value" class="form-control" placeholder="URL或指令"></div>
+                    <div class="col-md-2"><button class="btn btn-dark w-100">添加按钮</button></div>
                 </form>
             </div>
         </div>
     </div>
+
+    <div class="modal fade" id="userModal" tabindex="-1">
+        <form class="modal-dialog modal-lg" action="/save_user" method="post">
+            <div class="modal-content">
+                <div class="modal-header"><h5>添加/编辑认证用户</h5></div>
+                <div class="modal-body row g-3">
+                    <input type="hidden" name="token" value="{{token}}">
+                    <input type="hidden" name="gid" value="{{gid}}">
+                    <div class="col-md-6"><label>会员ID*</label><input type="number" name="user_id" class="form-control" required></div>
+                    <div class="col-md-6"><label>名字*</label><input type="text" name="name" class="form-control" required></div>
+                    <div class="col-md-4"><label>地区</label><input type="text" name="area" class="form-control"></div>
+                    <div class="col-md-4"><label>胸围</label><input type="text" name="chest_size" class="form-control"></div>
+                    <div class="col-md-4"><label>价格</label><input type="text" name="price" class="form-control"></div>
+                    <div class="col-md-4"><label>排序权重</label><input type="number" name="sort_order" class="form-control" value="0"></div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary">保存</button></div>
+            </div>
+        </form>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
