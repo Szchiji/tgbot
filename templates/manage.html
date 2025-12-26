@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>方丈后台 - 自动化设置</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        :root { --sidebar-bg: #001529; --sidebar-hover: #1890ff; }
+        body { display: flex; height: 100vh; overflow: hidden; background-color: #f4f7f9; }
+        /* 侧边栏样式 */
+        .sidebar { width: 220px; background: var(--sidebar-bg); color: rgba(255,255,255,0.65); flex-shrink: 0; }
+        .sidebar-brand { padding: 20px; color: white; font-size: 1.2rem; font-weight: bold; background: #002140; border-bottom: 1px solid #000; }
+        .nav-link { color: inherit; padding: 12px 20px; transition: 0.3s; }
+        .nav-link:hover, .nav-link.active { background: var(--sidebar-hover); color: white; }
+        /* 主体区域 */
+        .main-wrapper { flex-grow: 1; display: flex; flex-direction: column; overflow-y: auto; }
+        .top-nav { background: white; padding: 12px 30px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); z-index: 10; }
+        .content-body { padding: 25px; }
+        .card { border: none; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+        /* 表单样式优化 */
+        .modal-body label { font-size: 0.85rem; font-weight: 600; color: #555; margin-bottom: 4px; }
+        .form-text { font-size: 0.75rem; margin-top: 2px; }
+    </style>
+</head>
+<body>
+    <div class="sidebar d-flex flex-column">
+        <div class="sidebar-brand text-center"><i class="bi bi-person-workspace me-2"></i>方丈机器人</div>
+        <nav class="nav flex-column mt-3">
+            <a class="nav-link" href="#"><i class="bi bi-speedometer2 me-2"></i> 数据看板</a>
+            <a class="nav-link active" href="#"><i class="bi bi-chat-quote me-2"></i> 自动回复</a>
+            <a class="nav-link" href="#"><i class="bi bi-megaphone me-2"></i> 轮播广告</a>
+            <a class="nav-link" href="#"><i class="bi bi-shield-check me-2"></i> 垃圾防护</a>
+            <hr class="mx-3 opacity-25">
+            <a class="nav-link" href="/admin?token={{ token }}"><i class="bi bi-arrow-left-right me-2"></i> 切换群组</a>
+        </nav>
+    </div>
+
+    <div class="main-wrapper">
+        <div class="top-nav d-flex justify-content-between align-items-center">
+            <div class="fw-bold text-secondary">自动回复 / 认证会员管理</div>
+            <div class="d-flex align-items-center">
+                <span class="badge bg-light text-dark border me-3">{{ group.group_name }}</span>
+                <i class="bi bi-person-circle fs-5 me-1"></i> 管理员
+            </div>
+        </div>
+
+        <div class="content-body">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-4">
+                        <div class="input-group w-25">
+                            <span class="input-group-text bg-white border-end-0"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control border-start-0" placeholder="关键词搜索...">
+                        </div>
+                        <button class="btn btn-primary px-4" data-bs-toggle="modal" data-bs-target="#userModal">
+                            <i class="bi bi-plus-lg me-1"></i> 新增回推规则
+                        </button>
+                    </div>
+
+                    <table class="table table-hover">
+                        <thead class="table-light text-secondary">
+                            <tr><th>名字</th><th>地区</th><th>价位</th><th>排序</th><th>操作</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for u in users %}
+                            <tr>
+                                <td class="fw-bold text-primary">{{ u.name }}</td>
+                                <td>{{ u.area }}</td>
+                                <td><span class="text-success">{{ u.price }}</span></td>
+                                <td>{{ u.sort_order }}</td>
+                                <td><button class="btn btn-sm btn-link p-0">修改</button></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="userModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <form class="modal-content shadow" action="/save_user" method="post">
+                <input type="hidden" name="token" value="{{ token }}">
+                <input type="hidden" name="gid" value="{{ gid }}">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="fw-bold">编辑机器人会员</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4 row g-3">
+                    <div class="col-12">
+                        <label>会员Id * :</label>
+                        <input type="number" name="user_id" class="form-control" required>
+                        <div class="form-text">会员ID是数字ID，发送 <span class="text-danger">查</span> 查询</div>
+                    </div>
+                    <div class="col-12">
+                        <label>名字 :</label>
+                        <input type="text" name="name" class="form-control">
+                        <div class="form-text">认证用户名字，不可重复。</div>
+                    </div>
+                    <div class="col-md-6"><label>排序 (越大越靠前) :</label><input type="number" name="sort" class="form-control"></div>
+                    <div class="col-md-6"><label>老师名字 :</label><input type="text" name="t_name" class="form-control"></div>
+                    <div class="col-md-6"><label>联系方式 :</label><input type="text" name="chat_link" class="form-control"></div>
+                    <div class="col-md-6"><label>频道链接 :</label><input type="text" name="chan_link" class="form-control"></div>
+                    <div class="col-md-6"><label>地区 :</label><input type="text" name="area" class="form-control" value="福田"></div>
+                    <div class="col-md-6"><label>价位 :</label><input type="text" name="price" class="form-control"></div>
+                    <div class="col-md-4"><label>胸围 :</label><input type="text" name="chest" class="form-control" value="胸A"></div>
+                    <div class="col-md-4"><label>身高 :</label><input type="text" name="height" class="form-control"></div>
+                    <div class="col-md-4"><label>双向联系 :</label><input type="text" name="bi_contact" class="form-control"></div>
+                    <div class="col-12">
+                        <label>图片 :</label>
+                        <div class="mt-1"><button type="button" class="btn btn-primary btn-sm rounded-1">选择 <i class="bi bi-chevron-down"></i></button></div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">关闭</button>
+                    <button type="submit" class="btn btn-primary px-5">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
