@@ -1,131 +1,132 @@
-import os, asyncio, sqlite3, logging, secrets
+import os, asyncio, sqlite3, logging
 from datetime import datetime
-from contextlib import contextmanager
-from fastapi import FastAPI, Request, Form, Depends, HTTPException, status
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
-
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.client.default import DefaultBotProperties
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
 import uvicorn
 
-# --- 1. 配置加载 ---
+# --- 基础配置 ---
 TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-DB_PATH = os.getenv("DB_PATH", "/data/bot.db")
-WEB_ADMIN = os.getenv("WEB_ADMIN", "admin")
-WEB_PASS = os.getenv("WEB_PASS", "admin888")
-
-# --- 2. 初始化服务 ---
-app = FastAPI()
-security = HTTPBasic()
-templates = Jinja2Templates(directory="templates")
-
+DB_PATH = "/data/bot.db"
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
-logging.basicConfig(level=logging.INFO)
+app = FastAPI()
+templates = Jinja2Templates(directory="templates")
 
-# --- 3. 数据库持久化 ---
-@contextmanager
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try: yield conn
-    finally: conn.close()
-
+# --- 数据库初始化 (完整复刻截图字段) ---
 def init_db():
-    db_dir = os.path.dirname(DB_PATH)
-    if not os.path.exists(db_dir): os.makedirs(db_dir)
-    with get_db() as conn:
-        conn.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value INTEGER)')
-        conn.execute('''CREATE TABLE IF NOT EXISTS members (
-                            user_id INTEGER PRIMARY KEY, stage_name TEXT, 
-                            expire_date TEXT, area TEXT, note TEXT)''')
+    os.makedirs("/data", exist_ok=True)
+    with sqlite3.connect(DB_PATH) as conn:
+        # 认证用户表
+        conn.execute('''CREATE TABLE IF NOT EXISTS verified_users (
+                        user_id INTEGER PRIMARY KEY, 
+                        name TEXT, 
+                        sort_order INTEGER DEFAULT 0,
+                        teacher_name TEXT,
+                        chat_link TEXT,      -- 名字跳转链接 (私聊)
+                        channel_link TEXT,   -- 频道跳转链接
+                        area TEXT,
+                        price TEXT,
+                        chest_size TEXT,
+                        height TEXT,
+                        bi_contact TEXT)''')
+        # 今日打卡表
         conn.execute('''CREATE TABLE IF NOT EXISTS checkins (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, 
-                            stage_name TEXT, area TEXT, checkin_date TEXT, checkin_time TEXT)''')
-        defaults = [('del_join', 1), ('del_leave', 1), ('del_pin', 1), ('calculator', 0)]
-        conn.executemany("INSERT OR IGNORE INTO settings VALUES (?, ?)", defaults)
+                        user_id INTEGER PRIMARY KEY, checkin_date TEXT)''')
+        # 消息模板表
+        conn.execute('''CREATE TABLE IF NOT EXISTS msg_templates (
+                        id TEXT PRIMARY KEY, header TEXT, item_format TEXT)''')
+        
+        # 预设默认模板 (复刻截图 UI)
+        d_header = "<b>榨汁 🐓</b>\n<b>以下为今日开课老师</b>\n\n老师发送“打卡”完成登记，打卡未显示请联系推广员\n\n"
+        d_item = "✅ {area} <a href='{chat_link}'>{name}</a> <a href='{chan_link}'>频道</a> 胸{chest} {price}"
+        conn.execute("INSERT OR IGNORE INTO msg_templates VALUES ('juicing', ?, ?)", (d_header, d_item))
         conn.commit()
 
-# --- 4. Web 鉴权 ---
-def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
-    if not (secrets.compare_digest(credentials.username, WEB_ADMIN) and 
-            secrets.compare_digest(credentials.password, WEB_PASS)):
-        raise HTTPException(status_code=401, headers={"WWW-Authenticate": "Basic"})
-    return credentials.username
+# --- 机器人业务逻辑 ---
 
-# --- 5. Web 路由 (统计、会员、设置) ---
+@dp.message(F.chat.type.in_({"group", "supergroup"}))
+async def handle_group_msg(msg: types.Message):
+    uid = msg.from_user.id
+    text = msg.text or ""
 
-@app.get("/", response_class=HTMLResponse)
-@app.get("/stats", response_class=HTMLResponse)
-async def stats_page(request: Request, user: str = Depends(authenticate)):
+    # 获取认证用户信息
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        user = conn.execute("SELECT * FROM verified_users WHERE user_id = ?", (uid,)).fetchone()
+
+    # 1. 认证老师发言自动点赞
+    if user:
+        try: await msg.react([types.ReactionTypeEmoji(emoji="👍")])
+        except: pass
+
+        # 2. 老师发送“打卡”
+        if text == "打卡":
+            today = datetime.now().strftime("%Y-%m-%d")
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT OR REPLACE INTO checkins VALUES (?, ?)", (uid, today))
+                conn.commit()
+            await msg.reply(f"✅ <b>{user['name']}</b> 登记成功！已加入列表。")
+
+    # 3. 任何人发送“今日榨汁”展示列表
+    if text == "今日榨汁":
+        content, kb = await render_juicing_list()
+        await msg.answer(content, reply_markup=kb, disable_web_page_preview=True)
+
+async def render_juicing_list():
     today = datetime.now().strftime("%Y-%m-%d")
-    with get_db() as conn:
-        today_count = conn.execute("SELECT COUNT(*) FROM checkins WHERE checkin_date=?", (today,)).fetchone()[0]
-        total_members = conn.execute("SELECT COUNT(*) FROM members").fetchone()[0]
-        recent = conn.execute("SELECT * FROM checkins ORDER BY id DESC LIMIT 10").fetchall()
-        area_stats = conn.execute("SELECT area, COUNT(*) as count FROM checkins GROUP BY area").fetchall()
-    return templates.TemplateResponse("stats.html", {"request": request, "today_count": today_count, "total_members": total_members, "recent": recent, "area_stats": area_stats})
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        tpl = conn.execute("SELECT * FROM msg_templates WHERE id = 'juicing'").fetchone()
+        # 关联查询今日打卡的老师
+        users = conn.execute('''SELECT u.* FROM verified_users u JOIN checkins c ON u.user_id = c.user_id 
+                                WHERE c.checkin_date = ? ORDER BY u.sort_order DESC''', (today,)).fetchall()
+    
+    if not users: return "<b>今日暂无老师开课。</b>", None
+
+    res = tpl['header']
+    for u in users:
+        res += tpl['item_format'].format(
+            area=u['area'] or "未知",
+            name=u['name'] or "匿名",
+            chat_link=u['chat_link'] or "https://t.me/",
+            chan_link=u['channel_link'] or "https://t.me/",
+            chest=u['chest_size'] or "-",
+            price=u['price'] or "面议"
+        ) + "\n"
+
+    builder = InlineKeyboardBuilder()
+    builder.row(types.InlineKeyboardButton(text="上一页", callback_data="p"), types.InlineKeyboardButton(text="1/1", callback_data="n"))
+    builder.row(types.InlineKeyboardButton(text="↗️ 榨汁推广员", url="https://t.me/your_admin_id"))
+    return res, builder.as_markup()
+
+# --- Web 路由 ---
 
 @app.get("/members", response_class=HTMLResponse)
-async def members_page(request: Request, q: str = None, user: str = Depends(authenticate)):
-    today_str = datetime.now().strftime('%Y-%m-%d')
-    with get_db() as conn:
-        sql = "SELECT * FROM members WHERE stage_name LIKE ? OR user_id LIKE ?" if q else "SELECT * FROM members"
-        params = (f"%{q}%", f"%{q}%") if q else ()
-        rows = conn.execute(sql, params).fetchall()
-    members = [dict(r, is_expired=r['expire_date'] < today_str) for r in rows]
-    return templates.TemplateResponse("members.html", {"request": request, "members": members, "search_q": q or ""})
+async def members_page(request: Request):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        users = conn.execute("SELECT * FROM verified_users ORDER BY sort_order DESC").fetchall()
+    return templates.TemplateResponse("members.html", {"request": request, "users": users})
 
 @app.post("/members/save")
-async def save_member(user_id: int = Form(...), stage_name: str = Form(...), expire_date: str = Form(...), area: str = Form(""), note: str = Form(""), user: str = Depends(authenticate)):
-    with get_db() as conn:
-        conn.execute("INSERT OR REPLACE INTO members VALUES (?, ?, ?, ?, ?)", (user_id, stage_name, expire_date, area, note))
+async def save_member(user_id: int = Form(...), name: str = Form(...), sort: int = Form(0),
+                      t_name: str = Form(""), chat_link: str = Form(""), chan_link: str = Form(""),
+                      area: str = Form(""), price: str = Form(""), chest: str = Form(""),
+                      height: str = Form(""), bi_contact: str = Form("")):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute('''INSERT OR REPLACE INTO verified_users VALUES (?,?,?,?,?,?,?,?,?,?,?)''', 
+                     (user_id, name, sort, t_name, chat_link, chan_link, area, price, chest, height, bi_contact))
         conn.commit()
     return RedirectResponse(url="/members", status_code=303)
 
-@app.get("/members/delete/{uid}")
-async def delete_member(uid: int, user: str = Depends(authenticate)):
-    with get_db() as conn:
-        conn.execute("DELETE FROM members WHERE user_id = ?", (uid,))
-        conn.commit()
-    return RedirectResponse(url="/members", status_code=303)
-
-@app.get("/settings", response_class=HTMLResponse)
-async def settings_page(request: Request, user: str = Depends(authenticate)):
-    with get_db() as conn:
-        sets = {s['key']: s['value'] for s in conn.execute("SELECT * FROM settings").fetchall()}
-    return templates.TemplateResponse("settings.html", {"request": request, "settings": sets})
-
-@app.post("/update_settings")
-async def update_settings(del_join: bool = Form(False), del_leave: bool = Form(False), del_pin: bool = Form(False), calculator: bool = Form(False), user: str = Depends(authenticate)):
-    with get_db() as conn:
-        for k, v in {'del_join': del_join, 'del_leave': del_leave, 'del_pin': del_pin, 'calculator': calculator}.items():
-            conn.execute("UPDATE settings SET value=? WHERE key=?", (1 if v else 0, k))
-        conn.commit()
-    return RedirectResponse(url="/settings", status_code=303)
-
-# --- 6. 机器人业务逻辑 (陌生人不管) ---
-
-@dp.message(F.text.contains("打卡"))
-async def handle_checkin(msg: types.Message):
-    with get_db() as conn:
-        member = conn.execute("SELECT * FROM members WHERE user_id = ?", (msg.from_user.id,)).fetchone()
-    if not member or member['expire_date'] < datetime.now().strftime('%Y-%m-%d'): return
-    now = datetime.now()
-    with get_db() as conn:
-        conn.execute("INSERT INTO checkins (user_id, stage_name, area, checkin_date, checkin_time) VALUES (?, ?, ?, ?, ?)",
-                     (msg.from_user.id, member['stage_name'], member['area'], now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S")))
-        conn.commit()
-    await msg.reply(f"✅ <b>{member['stage_name']}</b> 打卡成功！\n时间：{now.strftime('%H:%M:%S')}")
-
-# --- 7. 系统启动 ---
 @app.on_event("startup")
-async def startup_event():
+async def startup():
     init_db()
     asyncio.create_task(dp.start_polling(bot))
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    uvicorn.run(app, host="0.0.0.0", port=8080)
