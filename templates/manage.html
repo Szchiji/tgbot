@@ -1,24 +1,118 @@
-<form action="/manage" method="get" class="d-flex mb-3">
-    <input type="hidden" name="token" value="{{token}}">
-    <input type="hidden" name="gid" value="{{gid}}">
-    <input type="text" name="q" class="form-control me-2" placeholder="输入ID或名字搜索" value="{{q}}">
-    <button class="btn btn-primary" type="submit">搜索</button>
-</form>
-
-<form action="/save_user" method="post" enctype="multipart/form-data">
-    <input type="hidden" name="token" value="{{token}}">
-    <input type="hidden" name="gid" value="{{gid}}">
-    <div class="mb-3">
-        <label>图片上传 :</label>
-        <input type="file" name="photo" class="form-control">
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>管理后台 - 认证会员</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        :root { --sidebar-bg: #001529; --sidebar-active: #1890ff; }
+        body { display: flex; height: 100vh; background: #f4f7f9; }
+        .sidebar { width: 220px; background: var(--sidebar-bg); color: #a6adb4; flex-shrink: 0; }
+        .sidebar-brand { padding: 20px; background: #002140; color: white; font-weight: bold; }
+        .nav-link { color: #a6adb4; padding: 12px 20px; transition: 0.3s; }
+        .nav-link:hover, .nav-link.active { color: white; background: var(--sidebar-active); }
+        .main { flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; }
+        .header { background: white; padding: 15px 30px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
+        .form-label { font-size: 0.85rem; font-weight: bold; margin-bottom: 3px; }
+    </style>
+</head>
+<body>
+    <div class="sidebar d-flex flex-column">
+        <div class="sidebar-brand text-center">方丈机器人</div>
+        <nav class="nav flex-column mt-2">
+            <a class="nav-link" href="/dashboard?token={{token}}&gid={{gid}}"><i class="bi bi-speedometer2 me-2"></i> 数据看板</a>
+            <div>
+                <a class="nav-link active d-flex justify-content-between" data-bs-toggle="collapse" href="#memberMenu">
+                    <span><i class="bi bi-people me-2"></i> 成员管理</span>
+                    <i class="bi bi-chevron-down small"></i>
+                </a>
+                <div class="collapse show" id="memberMenu">
+                    <nav class="nav flex-column ps-3 small">
+                        <a class="nav-link active bg-transparent" href="#">认证用户</a>
+                    </nav>
+                </div>
+            </div>
+            <a class="nav-link" href="/settings?token={{token}}&gid={{gid}}"><i class="bi bi-gear me-2"></i> 基本配置</a>
+            <hr class="mx-3 border-secondary">
+            <a class="nav-link" href="/portal?token={{token}}"><i class="bi bi-arrow-left-right me-2"></i> 切换群组</a>
+        </nav>
     </div>
-    <button type="submit" class="btn btn-primary">保存</button>
-</form>
 
-<td>
-    {% if u.photo_url %}
-    <img src="{{ u.photo_url }}" width="50" height="50" style="object-fit:cover; border-radius:4px;">
-    {% else %}
-    无图
-    {% endif %}
-</td>
+    <div class="main">
+        <div class="header d-flex justify-content-between">
+            <span class="fw-bold">群组：{{ group.group_name }}</span>
+            <span class="text-muted small">ID: {{ gid }}</span>
+        </div>
+        <div class="p-4">
+            <div class="card border-0 shadow-sm p-4">
+                <div class="d-flex justify-content-between mb-4">
+                    <form action="/manage" method="get" class="d-flex w-25">
+                        <input type="hidden" name="token" value="{{token}}">
+                        <input type="hidden" name="gid" value="{{gid}}">
+                        <input type="text" name="q" class="form-control me-2" placeholder="搜索ID/名字..." value="{{q}}">
+                        <button class="btn btn-primary btn-sm" type="submit">搜索</button>
+                    </form>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#userModal">+ 新增回推规则</button>
+                </div>
+
+                <table class="table align-middle">
+                    <thead class="table-light">
+                        <tr><th>照片</th><th>名字</th><th>地区</th><th>价位</th><th>排序</th><th>操作</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for u in users %}
+                        <tr>
+                            <td>
+                                {% if u.photo_url %}
+                                <img src="{{ u.photo_url }}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;">
+                                {% else %}
+                                <div class="bg-light small text-center" style="width:40px;height:40px;line-height:40px">无图</div>
+                                {% endif %}
+                            </td>
+                            <td class="fw-bold">{{ u.name }}</td>
+                            <td>{{ u.area }}</td>
+                            <td class="text-success fw-bold">{{ u.price }}</td>
+                            <td>{{ u.sort_order }}</td>
+                            <td><button class="btn btn-sm btn-link">修改</button></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="userModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <form class="modal-content" action="/save_user" method="post" enctype="multipart/form-data">
+                <input type="hidden" name="token" value="{{ token }}">
+                <input type="hidden" name="gid" value="{{ gid }}">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="fw-bold">编辑机器人会员</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4 row g-3">
+                    <div class="col-12"><label class="form-label">会员Id * :</label><input type="number" name="user_id" class="form-control" required></div>
+                    <div class="col-12"><label class="form-label">名字 :</label><input type="text" name="name" class="form-control"></div>
+                    <div class="col-md-6"><label>排序 :</label><input type="number" name="sort" class="form-control"></div>
+                    <div class="col-md-6"><label>老师名字 :</label><input type="text" name="t_name" class="form-control"></div>
+                    <div class="col-md-6"><label>联系方式 :</label><input type="text" name="chat_link" class="form-control"></div>
+                    <div class="col-md-6"><label>频道链接 :</label><input type="text" name="chan_link" class="form-control"></div>
+                    <div class="col-md-6"><label>地区 :</label><input type="text" name="area" class="form-control" value="福田"></div>
+                    <div class="col-md-6"><label>价位 :</label><input type="text" name="price" class="form-control"></div>
+                    <div class="col-md-4"><label>胸围 :</label><input type="text" name="chest" class="form-control" value="胸A"></div>
+                    <div class="col-md-4"><label>身高 :</label><input type="text" name="height" class="form-control"></div>
+                    <div class="col-md-4"><label>双向联系 :</label><input type="text" name="bi_contact" class="form-control"></div>
+                    <div class="col-12"><label>照片上传 :</label><input type="file" name="photo" class="form-control"></div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    <button type="submit" class="btn btn-primary px-5">提交保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
